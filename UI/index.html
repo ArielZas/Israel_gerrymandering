@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gerrymander Israel</title>
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- d3-delaunay for Voronoi -->
+  <script src="https://cdn.jsdelivr.net/npm/d3-delaunay@6/dist/d3-delaunay.min.js"></script>
+
+  <!-- PapaParse for CSV -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5/papaparse.min.js"></script>
+
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="app">
+    <div id="sidebar">
+      <h2>מפת בחירות - ישראל</h2>
+      <div id="legend">
+        <div class="legend-item"><span class="swatch" style="background:hsl(220,75%,45%)"></span>ביבי</div>
+        <div class="legend-item"><span class="swatch" style="background:hsl(4,75%,45%)"></span>לא ביבי</div>
+        <div class="legend-item"><span class="swatch" style="background:hsl(145,55%,42%)"></span>ערבי</div>
+      </div>
+      <div id="precinct-info">
+        <p class="placeholder">לחץ על תא כדי לראות פרטים</p>
+      </div>
+    </div>
+
+    <div id="map-container">
+      <div id="map"></div>
+    </div>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
