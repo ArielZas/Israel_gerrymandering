@@ -18,20 +18,22 @@ class Precinct:
 
 
 def load_precincts() -> list[Precinct]:
-    precincts = []
-    with open(_CSV_PATH, encoding='utf-8') as f:
-        for i, row in enumerate(csv.DictReader(f)):
+    precincts_list = []
+    with open(_CSV_PATH, mode='r', encoding='utf-8') as file:
+        reader = csv.DictReader(file)         
+        for i, row in enumerate(reader):
             try:
-                precincts.append(Precinct(
+                precincts_list.append(Precinct(
                     id=i,
-                    lat=float(row['lat']),
+                    lat=float(row['lat']),         
                     lon=float(row['lon']),
-                    left=int(float(row['left'])),
+                    left=int(float(row['left'])),  
                     right=int(float(row['right'])),
                     arab=int(float(row['arab'])),
                     population=int(float(row['population'])),
                     name=row['yisuv name'],
                 ))
-            except (ValueError, KeyError):
+            except (ValueError, KeyError):         
                 continue
-    return precincts
+    return precincts_list
+

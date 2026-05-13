@@ -1,0 +1,160 @@
+ISRAEL GERRYMANDERING — IMPLEMENTATION CHECKLIST
+=================================================
+Implement in this order. Each step depends on the ones above it.
+
+─────────────────────────────────────────────────
+STEP 1 — app/data/loader.py
+─────────────────────────────────────────────────
+[ ] load_precincts()
+    - Open data/precincts_merged.csv with csv.DictReader
+    - For each row: cast lat/lon to float, votes/population to int(float(...))
+    - Wrap in try/except (ValueError, KeyError) to skip bad rows
+    - Return list[Precinct]
+
+    Test: python -c "from app.data.loader import load_precincts; p = load_precincts(); print(len(p), p[0])"
+    Expected: ~4000 rows, first precinct printed
+
+─────────────────────────────────────────────────
+STEP 2 — app/core/adjacency.py
+─────────────────────────────────────────────────
+[ ] build_adjacency()
+    - Extract (lon, lat) into numpy array
+    - scipy.spatial.Delaunay on coords
+    - Add all precincts as nodes, then for each triangle add 3 edges
+    - Return networkx.Graph
+
+    Test: from app.data.loader import load_precincts; from app.core.adjacency import build_adjacency
+          G = build_adjacency(load_precincts()); print(G.number_of_nodes(), G.number_of_edges())
+    Expected: ~4000 nodes, ~12000 edges
+
+─────────────────────────────────────────────────
+STEP 3 — app/core/solver.py
+─────────────────────────────────────────────────
+[ ] _farthest_point_seeds()
+    - Start from point nearest to coords.mean()
+    - Maintain min_dists array (distance to nearest seed)
+    - Each iteration: pick argmax(min_dists), update min_dists, zero out picked
+
+[ ] solve()
+    - Call _farthest_point_seeds to get n seed indices
+    - Assign each seed to its district
+    - Push seed neighbours into min-heap keyed by (district_population, district_id, precinct_id)
+    - Pop heap: assign precinct, add population, push its unassigned neighbours
+    - Fallback: any unassigned precinct → district 0
+    - Return {precinct_id: district_id}
+
+    Test: run solve with n_districts=10, verify len(set(assignment.values())) == 10
+
+─────────────────────────────────────────────────
+STEP 4 — app/core/metrics.py
+─────────────────────────────────────────────────
+[ ] compute_district_results()
+    - Build id_to_precinct lookup
+    - Sum left/right/arab per district
+    - Winner = max(votes, key=votes.get)
+    - Return {district_id: {'winner': str, 'votes': dict}}
+
+[ ] seat_summary()
+    - Count how many districts each bloc wins
+    - Return {'right': N, 'left': N, 'arab': N}
+
+    Test: print(seat_summary(compute_district_results(assignment, precincts)))
+    Expected: three blocs with counts summing to n_districts
+
+─────────────────────────────────────────────────
+STEP 5 — app/ui/main_window.py  (geometry helpers)
+─────────────────────────────────────────────────
+[ ] _MAP_HTML string
+    - Leaflet CSS + JS from unpkg CDN
+    - Full-page #map div
+    - L.map at [31.5, 35.0] zoom 7, OSM tile layer
+    - JS function renderPrecincts(geojson): L.geoJSON with fillColor from
+      feature.properties.color, thin border, tooltip with name + vote counts
+
+[ ] _load_border()
+    - Open boundaries/Israel_jns_map.geojson
+    - shape() each feature geometry, return unary_union
+
+[ ] _compute_voronoi_polygons()
+    - numpy coords from precincts
+    - shapely voronoi_diagram(MultiPoint(coords))
+    - For each region: clip with .intersection(border)
+    - KDTree query on centroid to find owning precinct
+    - Return {precinct_id: polygon}
+
+[ ] _precincts_to_geojson()
+    - For each polygon: dominant bloc = max({left,right,arab}, key=dict.get)
+    - Build GeoJSON Feature with color + vote counts as properties
+    - Return json.dumps of FeatureCollection
+
+[ ] _districts_to_geojson()
+    - Group polygons by district using assignment dict
+    - unary_union each group → one polygon per district
+    - Color by results[district_id]['winner']
+    - Return json.dumps of FeatureCollection
+
+─────────────────────────────────────────────────
+STEP 6 — app/ui/config_panel.py
+─────────────────────────────────────────────────
+[ ] ConfigPanel.__init__()
+    - QLabel "Number of Districts"
+    - QSpinBox range 2–120, default 10
+    - QPushButton "Run Solver" → emit run_requested(spinbox.value())
+    - addStretch()
+
+─────────────────────────────────────────────────
+STEP 7 — app/ui/results_panel.py
+─────────────────────────────────────────────────
+[ ] ResultsPanel.__init__()
+    - Seat summary QTableWidget (3 rows, 2 cols: Bloc / Seats)
+    - Districts QTableWidget (0 rows, 5 cols: # / Winner / Right / Left / Arab)
+
+[ ] ResultsPanel.update_results()
+    - Call seat_summary() → fill summary table
+    - Iterate sorted districts → fill districts table, color rows by _BG[winner]
+    - resizeColumnsToContents()
+
+─────────────────────────────────────────────────
+STEP 8 — app/ui/district_window.py
+─────────────────────────────────────────────────
+[ ] _MAP_HTML string  (same structure as main_window but with renderDistricts)
+    - renderDistricts(geojson): L.geoJSON, fillColor from properties.color,
+      fillOpacity 0.65, black border weight 2, tooltip with district/winner/votes
+
+[ ] DistrictWindow.__init__()
+    - QWebEngineView with _MAP_HTML, setCentralWidget
+    - loadFinished → runJavaScript("renderDistricts(<geojson>);")
+    - ResultsPanel in right dock, populated with update_results()
+
+─────────────────────────────────────────────────
+STEP 9 — app/ui/main_window.py  (MainWindow class)
+─────────────────────────────────────────────────
+[ ] MainWindow.__init__()
+    - QWebEngineView with _MAP_HTML, connect loadFinished → _on_map_loaded
+    - ConfigPanel in left dock, connect run_requested → _on_run_solver
+
+[ ] MainWindow._on_map_loaded()
+    - load_precincts() → self._precincts
+    - _load_border() → border
+    - _compute_voronoi_polygons() → self._polygons
+    - _precincts_to_geojson() → geojson
+    - runJavaScript("renderPrecincts(<geojson>);")
+
+[ ] MainWindow._on_run_solver()
+    - Guard: return if precincts/polygons not ready
+    - build_adjacency → graph
+    - solve → assignment
+    - compute_district_results → results
+    - _districts_to_geojson → geojson
+    - self._district_window = DistrictWindow(geojson, results)  ← must store ref!
+    - self._district_window.show()
+
+─────────────────────────────────────────────────
+STEP 10 — app/main.py
+─────────────────────────────────────────────────
+[ ] main()
+    - QApplication(sys.argv)
+    - MainWindow().show()
+    - sys.exit(app.exec())
+
+    Run: python app/main.py
